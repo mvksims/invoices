@@ -3,6 +3,7 @@ Modules
 - python-telegram-bot
 - mysql-connector-python
 - openai
+- borb
 
 Insall modules
 ```

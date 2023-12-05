@@ -1,88 +1,182 @@
 import json
-import random
-from faker import Faker
-from reportlab.pdfgen import canvas
+from helpers import number_to_words_latvian, format_currency
+from decimal import Decimal
+from pathlib import Path  
+from borb.pdf import Document
+from borb.pdf import PDF
+from borb.pdf import Page
+from borb.pdf import PageLayout
+from borb.pdf import Paragraph
+from borb.pdf import SingleColumnLayout
+from borb.pdf import Alignment
+from borb.pdf import HexColor
+from borb.pdf import TableCell
+from borb.pdf import FixedColumnWidthTable
+from borb.pdf.canvas.font.simple_font.true_type_font import TrueTypeFont  
+from borb.pdf.canvas.font.font import Font
 
-fake = Faker()
+def create_paragraph(text, font, alignment, color, size):
+    return Paragraph(text, font=font, horizontal_alignment=alignment, font_color=HexColor(color), font_size=Decimal(size))
 
-def generate_invoice_data():
-    client_details = {
-        "company_name": fake.company(),
-        "registration_number": fake.random_int(min=1000, max=9999),
-        "vat_number": fake.random_int(min=100000, max=999999),
-        "address": fake.address(),
-        "phone_number": fake.phone_number(),
-        "email": fake.email(),
-        "bank_account": fake.iban(),
-    }
+def generate_pdf(payer, line_items):
+    # configure pdf
+    textColor1 = "#666666"
+    titleColor1 = "#000000"
+    backgroundColor1 = "#EEEEEE"
+    fontSize = 10
+    font_path: Path = Path("assets/Roboto-Regular.ttf")
+    font: Font = TrueTypeFont.true_type_font_from_file(font_path)
 
-    seller_details = {
-        "company_name": "Your Company Name",
-        "registration_number": "12345",
-        "vat_number": "GB123456789",
-        "address": "Your Company Address",
-        "phone_number": "123-456-7890",
-        "email": "info@yourcompany.com",
-        "bank_account": "Your Bank Account Number",
-    }
+    sender = json.loads('{"name": "SIA INFLORIUM", "number": "Reģistrācijas nr. 40103750858", "vat_number": "PVN nr. LV40103750858", "account_line_1": "LV95HABA0551037785821", "account_line_2": "bHABALV22", "account_line_3": "Swedbank", "address": "Juridiskā adrese Rīga, Dunalkas iela 10, LV-1029"}')
 
-    products = [
-        {"line_item": fake.word(), "quantity": fake.random_int(min=1, max=10), "unit_price": f"{fake.random_int(min=5, max=50):.2f}"}
-        for _ in range(3)
-    ]
+    sender_lines = ""
+    for key, value in sender.items():
+        sender_lines += f"{value}\n"
 
-    total_pre_tax = sum(float(product["unit_price"]) * product["quantity"] for product in products)
-    tax = total_pre_tax * 0.21
-    total = total_pre_tax + tax
+    payer_lines = ""
+    for key, value in payer.items():
+        if value != "" and key != "type":
+            payer_lines += f"{value}\n"
 
-    return {
-        "client_details": client_details,
-        "seller_details": seller_details,
-        "products": products,
-        "total_pre_tax": f"{total_pre_tax:.2f}",
-        "tax": f"{tax:.2f}",
-        "total": f"{total:.2f}",
-    }
+    # setup Document
+    doc: Document = Document()
+    page: Page = Page()
+    doc.add_page(page)
+    layout: PageLayout = SingleColumnLayout(page)
 
-def create_invoice_pdf(file_path, invoice_data):
-    pdf_canvas = canvas.Canvas(file_path)
+    layout.add(Paragraph("Rēķins Nr. 2022", font=font))
+    layout.add(Paragraph("Datums 2012/1/11", font=font))
 
-    # Add client details
-    pdf_canvas.drawString(100, 800, "Client Details:")
-    y_position = 780
-    for key, value in invoice_data["client_details"].items():
-        pdf_canvas.drawString(100, y_position, f"{key}: {value}")
-        y_position -= 20
+    # Seller: title
+    layout.add(
+        Paragraph(
+            "Nosūtītājs", 
+            font=font, 
+            horizontal_alignment=Alignment.RIGHT,
+            font_color=HexColor(titleColor1),
+            font_size=Decimal(fontSize)
+        )
+    )
 
-    # Add seller details
-    pdf_canvas.drawString(100, y_position, "\nSeller Details:")
-    y_position -= 20
-    for key, value in invoice_data["seller_details"].items():
-        pdf_canvas.drawString(100, y_position, f"{key}: {value}")
-        y_position -= 20
+    # Seller: details
+    layout.add(
+        Paragraph(
+            sender_lines, 
+            respect_newlines_in_text=True,
+            font=font, 
+            horizontal_alignment=Alignment.RIGHT,
+            text_alignment=Alignment.RIGHT,
+            font_color=HexColor(textColor1),
+            font_size=Decimal(fontSize)
+        )
+    )
 
-    # Add products
-    pdf_canvas.drawString(100, y_position, "\nProducts:")
-    y_position -= 20
-    for product in invoice_data["products"]:
-        line_item = f"{product['line_item']} (Qty: {product['quantity']}, Unit Price: {product['unit_price']})"
-        pdf_canvas.drawString(100, y_position, line_item)
-        y_position -= 20
+    # Payer: title
+    layout.add(
+        Paragraph(
+            "Maksātājs",
+            font=font,
+            font_color=HexColor(titleColor1),
+            font_size=Decimal(fontSize)
+        )
+    )
 
-    # Add totals
-    pdf_canvas.drawString(100, y_position, "\nTotals:")
-    y_position -= 20
-    pdf_canvas.drawString(100, y_position, f"Total (Pre Tax): {invoice_data['total_pre_tax']}")
-    y_position -= 20
-    pdf_canvas.drawString(100, y_position, f"Tax: {invoice_data['tax']}")
-    y_position -= 20
-    pdf_canvas.drawString(100, y_position, f"Grand Total: {invoice_data['total']}")
+    # Payer: details
+    layout.add(
+        Paragraph(
+            payer_lines,
+            respect_newlines_in_text=True,
+            font=font,
+            font_color=HexColor(textColor1),
+            font_size=Decimal(fontSize)
+        )
+    )
 
-    # Save the PDF
-    pdf_canvas.save()
+    # config table
+    header_cells = ["Apraksts", "Skaits", "Vienības", "Cena", "Summa, EUR"]
 
-# Generate invoice data
-invoice_data = generate_invoice_data()
+    # init table
+    t: FixedColumnWidthTable = FixedColumnWidthTable(
+        number_of_columns=5,
+        number_of_rows=4,
+        column_widths=[Decimal(4), Decimal(.8), Decimal(.9), Decimal(1.2), Decimal(1.2)]
+        )
 
-# Generate PDF
-create_invoice_pdf("invoice_with_details.pdf", invoice_data)
+    # add header
+    for header_cell in header_cells:
+        textAligment = Alignment.LEFT
+        if header_cell in ("Skaits", "Vienības"):
+            textAligment = Alignment.CENTERED
+        if header_cell in ("Cena", "Summa, EUR"):
+            textAligment = Alignment.RIGHT
+
+        t.add(
+            TableCell(
+                create_paragraph(
+                    header_cell,
+                    font,
+                    textAligment,
+                    titleColor1,
+                    fontSize
+                ),
+                background_color=HexColor(backgroundColor1)
+            )
+        )
+
+    print(line_items.get('items'))
+    # add line items
+    for item in line_items.get('items'):
+        for key, value in item.items():
+            textAligment = Alignment.LEFT
+            if key in ("quantity"):
+                textAligment = Alignment.CENTERED
+
+            if key in ("unit_price", "subtotal"):
+                value = format_currency(value)
+                textAligment = Alignment.RIGHT
+            t.add(
+                TableCell(
+                    create_paragraph(
+                        f"{value}",
+                        font,
+                        textAligment,
+                        titleColor1,
+                        fontSize
+                    ),
+                )
+            )
+            if key == "quantity":
+                t.add(
+                    TableCell(
+                        create_paragraph(
+                            "gab.",
+                            font,
+                            Alignment.CENTERED,
+                            titleColor1,
+                            fontSize
+                        ),
+                    )
+                )           
+
+    t.set_padding_on_all_cells(Decimal(5), Decimal(5), Decimal(2), Decimal(5))
+
+    layout.add(t)
+    # Todo: add total/vat/ vat total number
+    
+    # layout.add(Paragraph('test', font=font))
+    # layout.add(Paragraph(number_to_words_latvian('1.01'), font=font))
+    # layout.add(Paragraph(number_to_words_latvian('11.3'), font=font))
+    # layout.add(Paragraph(number_to_words_latvian('123.11'), font=font))
+    # layout.add(Paragraph(number_to_words_latvian('123.13'), font=font))
+
+    # store
+    with open("output.pdf", "wb") as pdf_file_handle:
+        PDF.dumps(pdf_file_handle, doc)
+
+def main():
+    payer = json.loads('{"type": 1, "name": "SIA “Kreiss”", "registration_number": "40103116320", "vat_number": "LV40103116320", "address": "Bērzlapas 5, Mārupe, Mārupes novads, LV-2167, Latvija", "email": "", "phone_number": "+371 67409300", "bank_account": "LV38PARX0000021540002"}')
+    line_items = json.loads('{"items": [{"line_item": "Flowers", "quantity": 1, "unit_price": 35, "subtotal": 35}, {"line_item": "vase", "quantity": 3, "unit_price": 43, "subtotal": 129}, {"line_item": "Delivery in Riga", "quantity": 1, "unit_price": 20, "subtotal": 20}], "total": 184}')
+    generate_pdf(payer, line_items)
+
+if __name__ == "__main__":
+    main()

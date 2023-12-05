@@ -24,6 +24,7 @@ def parse_client_details(input):
         ]
     )
     result = json.loads(completion.choices[0].message.content)
+    print(result)
     return result
 
 
@@ -53,5 +54,6 @@ def parse_description_of_goods(input):
         ]
     )
     result = json.loads(completion.choices[0].message.content)
+    print(result)
     return result
 
