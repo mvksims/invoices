@@ -13,7 +13,7 @@ def wait_message():
     wait_messages = ["Wait!", "Moment!", "Sec!", "Pause!", "Hold!", "Quick!", "Chill!", "Easy!"]
     return random.choice(wait_messages)
 
-def number_to_words_latvian(currency):
+def amount_to_words(currency):
     units = [
         "nulle", "viens", "divi", "trīs", "četri", "pieci",
         "seši", "septiņi", "astoņi", "deviņi"
@@ -97,3 +97,14 @@ def format_currency(number, locale_str='nl_NL'):
     locale.setlocale(locale.LC_ALL, '')
 
     return formatted_currency
+
+def extract_vat(amount, vat=1.21):
+    if amount < 0 or vat <= 0:
+        raise ValueError("Amount and VAT must be positive values.")
+
+    vat_amount = amount / vat
+    return vat_amount
+
+def amount_without_vat(amount, vat=1.21):
+    return amount - extract_vat(amount, vat)
+

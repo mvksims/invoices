@@ -1,5 +1,5 @@
 import json
-from helpers import number_to_words_latvian, format_currency
+from helpers import amount_to_words, format_currency, extract_vat, amount_without_vat
 from decimal import Decimal
 from pathlib import Path  
 from borb.pdf import Document
@@ -15,19 +15,30 @@ from borb.pdf import FixedColumnWidthTable
 from borb.pdf.canvas.font.simple_font.true_type_font import TrueTypeFont  
 from borb.pdf.canvas.font.font import Font
 
-def create_paragraph(text, font, alignment, color, size):
-    return Paragraph(text, font=font, horizontal_alignment=alignment, font_color=HexColor(color), font_size=Decimal(size))
+# theme PDF
+textColor1 = "#000000"
+textColor2 = "#666666"
+
+backgroundColor1 = "#EEEEEE"
+fontSize = 10
+font_path: Path = Path("assets/Roboto-Regular.ttf")
+font: Font = TrueTypeFont.true_type_font_from_file(font_path)
+
+def create_paragraph(text, newlines=False, font=font, alignment=Alignment.LEFT, text_alignment=Alignment.LEFT, color=textColor1, size=fontSize):
+    return Paragraph(
+        text,
+        respect_newlines_in_text=newlines,
+        font=font,
+        horizontal_alignment=alignment,
+        text_alignment=text_alignment,
+        font_color=HexColor(color),
+        font_size=Decimal(size)
+    )
 
 def generate_pdf(payer, line_items):
-    # configure pdf
-    textColor1 = "#666666"
-    titleColor1 = "#000000"
-    backgroundColor1 = "#EEEEEE"
-    fontSize = 10
-    font_path: Path = Path("assets/Roboto-Regular.ttf")
-    font: Font = TrueTypeFont.true_type_font_from_file(font_path)
 
-    sender = json.loads('{"name": "SIA INFLORIUM", "number": "Reģistrācijas nr. 40103750858", "vat_number": "PVN nr. LV40103750858", "account_line_1": "LV95HABA0551037785821", "account_line_2": "bHABALV22", "account_line_3": "Swedbank", "address": "Juridiskā adrese Rīga, Dunalkas iela 10, LV-1029"}')
+
+    sender = json.loads('{"name": "SIA INFLORIUM",  "number": "Reģistrācijas nr. 40103750858", "vat_number": "PVN nr. LV40103750858", "account_line_1": "LV95HABA0551037785821", "account_line_2": "HABALV22", "account_line_3": "Swedbank", "address": "Juridiskā adrese Rīga, Dunalkas iela 10, LV-1029"}')
 
     sender_lines = ""
     for key, value in sender.items():
@@ -44,65 +55,56 @@ def generate_pdf(payer, line_items):
     doc.add_page(page)
     layout: PageLayout = SingleColumnLayout(page)
 
-    layout.add(Paragraph("Rēķins Nr. 2022", font=font))
-    layout.add(Paragraph("Datums 2012/1/11", font=font))
+    layout.add(create_paragraph("Rēķins Nr. 01/12/2023"))
+    layout.add(create_paragraph("Datums 01/12/2023"))
 
     # Seller: title
     layout.add(
-        Paragraph(
+        create_paragraph(
             "Nosūtītājs", 
-            font=font, 
-            horizontal_alignment=Alignment.RIGHT,
-            font_color=HexColor(titleColor1),
-            font_size=Decimal(fontSize)
+            alignment=Alignment.RIGHT
         )
     )
 
     # Seller: details
     layout.add(
-        Paragraph(
+        create_paragraph(
             sender_lines, 
-            respect_newlines_in_text=True,
-            font=font, 
-            horizontal_alignment=Alignment.RIGHT,
+            color=textColor2,
+            newlines=True,
+            alignment=Alignment.RIGHT,
             text_alignment=Alignment.RIGHT,
-            font_color=HexColor(textColor1),
-            font_size=Decimal(fontSize)
         )
     )
 
     # Payer: title
     layout.add(
-        Paragraph(
-            "Maksātājs",
-            font=font,
-            font_color=HexColor(titleColor1),
-            font_size=Decimal(fontSize)
+        create_paragraph(
+            "Maksātājs"
         )
     )
 
     # Payer: details
     layout.add(
-        Paragraph(
+        create_paragraph(
             payer_lines,
-            respect_newlines_in_text=True,
-            font=font,
-            font_color=HexColor(textColor1),
-            font_size=Decimal(fontSize)
+            color=textColor2,
+            newlines=True,
         )
     )
 
-    # config table
+    # config table header
     header_cells = ["Apraksts", "Skaits", "Vienības", "Cena", "Summa, EUR"]
+    total = 0
 
-    # init table
+    # define table
     t: FixedColumnWidthTable = FixedColumnWidthTable(
         number_of_columns=5,
-        number_of_rows=4,
+        number_of_rows=9,
         column_widths=[Decimal(4), Decimal(.8), Decimal(.9), Decimal(1.2), Decimal(1.2)]
         )
 
-    # add header
+    # table: add header
     for header_cell in header_cells:
         textAligment = Alignment.LEFT
         if header_cell in ("Skaits", "Vienības"):
@@ -114,17 +116,13 @@ def generate_pdf(payer, line_items):
             TableCell(
                 create_paragraph(
                     header_cell,
-                    font,
-                    textAligment,
-                    titleColor1,
-                    fontSize
+                    alignment=textAligment,
                 ),
                 background_color=HexColor(backgroundColor1)
             )
         )
 
-    print(line_items.get('items'))
-    # add line items
+    # tabadd line items
     for item in line_items.get('items'):
         for key, value in item.items():
             textAligment = Alignment.LEFT
@@ -132,16 +130,14 @@ def generate_pdf(payer, line_items):
                 textAligment = Alignment.CENTERED
 
             if key in ("unit_price", "subtotal"):
+                total = total + float(value)
                 value = format_currency(value)
                 textAligment = Alignment.RIGHT
             t.add(
                 TableCell(
                     create_paragraph(
                         f"{value}",
-                        font,
-                        textAligment,
-                        titleColor1,
-                        fontSize
+                        alignment=textAligment,
                     ),
                 )
             )
@@ -150,24 +146,157 @@ def generate_pdf(payer, line_items):
                     TableCell(
                         create_paragraph(
                             "gab.",
-                            font,
-                            Alignment.CENTERED,
-                            titleColor1,
-                            fontSize
+                            alignment=Alignment.CENTERED,
                         ),
                     )
                 )           
 
-    t.set_padding_on_all_cells(Decimal(5), Decimal(5), Decimal(2), Decimal(5))
+    # Total without VAT
+    t.add(
+        TableCell(
+            create_paragraph(
+                "Ar PVN 21% apliekamā summa:",
+                alignment=Alignment.RIGHT,
+            ),
+            column_span=4,
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )    
+    t.add(
+        TableCell(
+            create_paragraph(
+                format_currency(amount_without_vat(total)),
+                alignment=Alignment.RIGHT,
+            ),
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )  
 
+     # VAT line
+    t.add(
+        TableCell(
+            create_paragraph(
+                "PVN 21%:",
+                alignment=Alignment.RIGHT,
+            ),
+            column_span=4,
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )    
+    t.add(
+        TableCell(
+            create_paragraph(
+                format_currency(extract_vat(total)),
+                alignment=Alignment.RIGHT,
+            ),
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )     
+
+    # Total with VAT
+    t.add(
+        TableCell(
+            create_paragraph(
+                "Kopā ar PVN:",
+                alignment=Alignment.RIGHT,
+            ),
+            column_span=4,
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )    
+    t.add(
+        TableCell(
+            create_paragraph(
+                format_currency(total),
+                alignment=Alignment.RIGHT,
+            ),
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )     
+
+    # Amount in words
+    t.add(
+        TableCell(
+            create_paragraph(
+                "Summa vārdiem:",
+            ),
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )    
+    t.add(
+        TableCell(
+            create_paragraph(
+                amount_to_words(total),
+            ),
+            column_span=4,
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    ) 
+
+    # Due date
+    t.add(
+        TableCell(
+            create_paragraph(
+                "Apmaksas datums un kārtība:",
+            ),
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    )    
+    t.add(
+        TableCell(
+            create_paragraph(
+                "01.12.2023 / Pārskaitījums",
+            ),
+            column_span=4,
+            border_top=False,
+            border_left=False,
+            border_right=False,
+            border_bottom=False
+        )
+    ) 
+
+    t.set_padding_on_all_cells(Decimal(5), Decimal(5), Decimal(2), Decimal(5))
     layout.add(t)
-    # Todo: add total/vat/ vat total number
-    
-    # layout.add(Paragraph('test', font=font))
-    # layout.add(Paragraph(number_to_words_latvian('1.01'), font=font))
-    # layout.add(Paragraph(number_to_words_latvian('11.3'), font=font))
-    # layout.add(Paragraph(number_to_words_latvian('123.11'), font=font))
-    # layout.add(Paragraph(number_to_words_latvian('123.13'), font=font))
+
+    layout.add(
+        create_paragraph(
+            "Rēķins sagatavots elektroniski un ir derīgs bez paraksta",
+            alignment=Alignment.CENTERED
+        )
+    )
+    layout.add(
+        create_paragraph(
+            "INFLORIUM / www.inflorium.lv / studio@inflorium.lv / +371 29000000",
+            alignment=Alignment.CENTERED
+        )
+    )
 
     # store
     with open("output.pdf", "wb") as pdf_file_handle:
