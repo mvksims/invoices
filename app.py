@@ -1,8 +1,9 @@
 import os
 import logging
 from helpers import dictionary_to_inline_keyboard_markup, wait_message
-from client import client_search_by_keyword, save_client
-from ai import parse_client_details, parse_description_of_goods
+from storage import find_client, save_client
+from ai import parse_client, parse_lines
+from invoice import create_pdf
 from telegram import Update
 from telegram.ext import filters, ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler
 
@@ -32,7 +33,7 @@ async def request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     view = context.user_data['view']
     # SEARCH
     if view == 'search':
-        result = client_search_by_keyword(update.message.text)
+        result = find_client(update.message.text)
         if result:
                 await update.message.reply_text(
                     f"Found {len(result)-1} record. Select 'new' for a new client",
@@ -55,7 +56,7 @@ async def request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         await context.bot.send_message(chat_id=update.effective_chat.id, text=wait_message())
-        result = parse_client_details(update.message.text)
+        result = parse_client(update.message.text)
         context.user_data['client'] = result
 
         message = "Confirm: \n"
@@ -73,7 +74,7 @@ async def request(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"client:{context.user_data['client_id']}": "Cancel",
         }
         await context.bot.send_message(chat_id=update.effective_chat.id, text=wait_message())
-        invoice = parse_description_of_goods(update.message.text)
+        invoice = parse_lines(update.message.text)
         context.user_data['invoice'] = invoice
         message = "Confirm: \n"
         for item in invoice['items']:
@@ -87,24 +88,29 @@ async def request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         print("I am a bit lost here :)")
 
+    print(f"request: {context.user_data}")
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     controller = callback_to_controller(query.data)
     if controller['action'] == 'client':
         if controller['param_0'] == 'new':
-            # create new
+            # message: request new client details
             context.user_data['view'] = 'create_client'
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Alright. Please provide all the necessary client data")
         elif controller['param_0'] == 'save':
-            save_client(context.user_data['client'])
+            # client saved and selected
+            # message: request product lines
+            client_id = save_client(context.user_data['client'])
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Saved!")
-            #TODO fetch client data and assing local vars
+            # FIXME fetch client data and assing local vars
             # temporary solution for demo
             context.user_data['view'] = 'client'
-            context.user_data['client_id'] = 1   
+            context.user_data['client_id'] = client_id   
             await context.bot.send_message(chat_id=update.effective_chat.id, text="OK. Send me the list the goods in the invoice. Example: 'Flowers 35' or 'Flowers 35, Delivery in Riga 20'.") 
         else:
-            # set client
+            # client selected
+            # message: request product lines
             context.user_data['view'] = 'client'
             context.user_data['client_id'] = controller['param_0']
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Client {controller['param_0']} selected!")
@@ -112,11 +118,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     elif controller['action'] == 'invoice':
         if controller['param_0'] == 'save':
-            #save_invoice(context.user_data['client_id'], context.user_data['invoice'])
-            await context.bot.send_document(chat_id=update.effective_chat.id, document='invoice_with_details.pdf')
+
+            create_pdf(context.user_data['client'], context.user_data['invoice'])
+            await context.bot.send_document(chat_id=update.effective_chat.id, document='output.pdf')
             #await context.bot.send_message(chat_id=update.effective_chat.id, text="Invoice saved")
 
     await query.answer()
+    print(f"context: {context.user_data}")
     print(f"button selected: {controller}")
 
 if __name__ == '__main__':

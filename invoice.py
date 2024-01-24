@@ -35,11 +35,8 @@ def create_paragraph(text, newlines=False, font=font, alignment=Alignment.LEFT, 
         font_size=Decimal(size)
     )
 
-def generate_pdf(payer, line_items):
-
-
-    sender = json.loads('{"name": "SIA INFLORIUM",  "number": "Reģistrācijas nr. 40103750858", "vat_number": "PVN nr. LV40103750858", "account_line_1": "LV95HABA0551037785821", "account_line_2": "HABALV22", "account_line_3": "Swedbank", "address": "Juridiskā adrese Rīga, Dunalkas iela 10, LV-1029"}')
-
+def create_pdf(payer, line_items):
+    sender = json.loads('{"name": "SIA INFLORIUM",  "number": "Reģistrācijas nr. 40103750858", "vat_number": "PVN nr. LV40103750858", "account_line_1": "LV95HABA0551037785821", "account_line_2": "HABALV22", "account_line_3": "Swedbank", "address": "Juridiskā adrese Rīga, Dunalkas iela 10, LV-1029"}') 
     sender_lines = ""
     for key, value in sender.items():
         sender_lines += f"{value}\n"
@@ -100,37 +97,37 @@ def generate_pdf(payer, line_items):
     # define table
     t: FixedColumnWidthTable = FixedColumnWidthTable(
         number_of_columns=5,
-        number_of_rows=9,
+        number_of_rows= (6 + len(line_items.get('items'))),
         column_widths=[Decimal(4), Decimal(.8), Decimal(.9), Decimal(1.2), Decimal(1.2)]
         )
 
     # table: add header
-    for header_cell in header_cells:
+    for cell in header_cells:
         textAligment = Alignment.LEFT
-        if header_cell in ("Skaits", "Vienības"):
+        if cell in ("Skaits", "Vienības"):
             textAligment = Alignment.CENTERED
-        if header_cell in ("Cena", "Summa, EUR"):
+        if cell in ("Cena", "Summa, EUR"):
             textAligment = Alignment.RIGHT
 
         t.add(
             TableCell(
                 create_paragraph(
-                    header_cell,
+                    cell,
                     alignment=textAligment,
                 ),
                 background_color=HexColor(backgroundColor1)
             )
         )
 
-    # tabadd line items
+    # table: add line items
     for item in line_items.get('items'):
         for key, value in item.items():
             textAligment = Alignment.LEFT
             if key in ("quantity"):
                 textAligment = Alignment.CENTERED
-
-            if key in ("unit_price", "subtotal"):
+            if key in ("subtotal"):
                 total = total + float(value)
+            if key in ("unit_price", "subtotal"):
                 value = format_currency(value)
                 textAligment = Alignment.RIGHT
             t.add(
@@ -149,7 +146,7 @@ def generate_pdf(payer, line_items):
                             alignment=Alignment.CENTERED,
                         ),
                     )
-                )           
+                )       
 
     # Total without VAT
     t.add(
@@ -293,7 +290,7 @@ def generate_pdf(payer, line_items):
     )
     layout.add(
         create_paragraph(
-            "INFLORIUM / www.inflorium.lv / studio@inflorium.lv / +371 29000000",
+            "INFLORIUM / <a href=http://www.inflorium.lv>www.inflorium.lv</a> / studio@inflorium.lv / +371 2284 4122",
             alignment=Alignment.CENTERED
         )
     )
@@ -304,8 +301,8 @@ def generate_pdf(payer, line_items):
 
 def main():
     payer = json.loads('{"type": 1, "name": "SIA “Kreiss”", "registration_number": "40103116320", "vat_number": "LV40103116320", "address": "Bērzlapas 5, Mārupe, Mārupes novads, LV-2167, Latvija", "email": "", "phone_number": "+371 67409300", "bank_account": "LV38PARX0000021540002"}')
-    line_items = json.loads('{"items": [{"line_item": "Flowers", "quantity": 1, "unit_price": 35, "subtotal": 35}, {"line_item": "vase", "quantity": 3, "unit_price": 43, "subtotal": 129}, {"line_item": "Delivery in Riga", "quantity": 1, "unit_price": 20, "subtotal": 20}], "total": 184}')
-    generate_pdf(payer, line_items)
+    line_items = json.loads('{"items": [{"line_item": "Flowers", "quantity": 1, "unit_price": 35, "subtotal": 35}, {"line_item": "Delivery in Riga", "quantity": 1, "unit_price": 20, "subtotal": 20}], "total": 55}')
+    create_pdf(payer, line_items)
 
 if __name__ == "__main__":
     main()

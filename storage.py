@@ -18,8 +18,7 @@ def close_database_connection(connection, cursor):
     cursor.close()
     connection.close()
 
-
-def client_search_by_keyword(keyword):
+def find_client(keyword):
     result = {}
     connection = establish_database_connection()
     cursor = create_mysql_cursor(connection)
@@ -68,6 +67,7 @@ def save_client(client):
         print(f"Error: {err}")
     finally:
         close_database_connection(connection, cursor)
+        return cursor.lastrowid
 
-def save_invoice(client_id, invoice):
+def save_lines(client_id, invoice):
     print("hello world")

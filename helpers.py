@@ -32,7 +32,6 @@ def amount_to_words(currency):
 
     thousands = [
         "", "tūkstotis", "miljons", "miljards", "triljons", "kvadriljons"
-        # Add more as needed
     ]
 
     # Helper function to convert a number less than 1000 to words

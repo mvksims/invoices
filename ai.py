@@ -5,7 +5,7 @@ from openai import OpenAI
 model = "gpt-4-1106-preview"
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-def parse_client_details(input):
+def parse_client(input):
     completion = client.chat.completions.create(
         model=model,
         response_format={ "type": "json_object" },
@@ -15,7 +15,7 @@ def parse_client_details(input):
                 "Given an input containing information about an business entity or private individual, please identify type: business entity or private individual and extract the relevant details. " +
                 "Build a JSON response with the following fields:" +
                 "For private individual: 'first_name', 'last_name', 'email', 'phone_number' and 'type' with '2' value." +
-                "For business entity: 'name', 'registration_number', 'vat_number', 'address', 'email', 'phone_number', and 'bank_account' and 'type' with '1' value." + 
+                "For business entity: 'company_name', 'registration_number', 'vat_number', 'address', 'email', 'phone_number', and 'bank_account' and 'type' with '1' value." + 
                 "'vat_number' value starts with `LV` substring"
                 "If multiple bank account numbers provided, select first one. " +
                 "If any of these fields are missing in the input, include them in the JSON response with empty strings as values. "
@@ -27,8 +27,7 @@ def parse_client_details(input):
     print(result)
     return result
 
-
-def parse_description_of_goods(input):
+def parse_lines(input):
     completion = client.chat.completions.create(
         model=model,
         response_format={ "type": "json_object" },
@@ -56,4 +55,3 @@ def parse_description_of_goods(input):
     result = json.loads(completion.choices[0].message.content)
     print(result)
     return result
-
